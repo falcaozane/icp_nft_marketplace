@@ -4,6 +4,7 @@ import NFTActorClass "../NFT/nft";
 import Principal "mo:base/Principal";
 import HashMap  "mo:base/HashMap";
 import List "mo:base/List";
+import Bool "mo:base/Bool";
 
 
 actor OpenD {
@@ -75,6 +76,15 @@ actor OpenD {
 
     public query func getOpenDCanisterID() : async Principal {
       return Principal.fromActor(OpenD);
+    };
+
+    public query func isListed(id: Principal):async Bool{
+      if(mapOfListings.get(id) == null){
+        return false;
+      }
+      else{
+        return true;
+      }
     }
 
 
