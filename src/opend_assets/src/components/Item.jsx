@@ -2,9 +2,12 @@ import React, { useEffect, useState } from "react";
 import logo from "../../assets/logo.png";
 import { Actor, HttpAgent } from "@dfinity/agent";
 import { idlFactory } from "../../../declarations/nft";
+import { idlFactory as tokenIdlFactory } from "../../../declarations/token";
 import { Principal } from "@dfinity/principal";
 import { opend } from "../../../declarations/opend";
 import Button from "./Button";
+import CURRENT_USER_ID from "../index";
+import PriceLabel from "./PriceLabel";
 
 function Item(props) {
   const [name, setName] = useState();
@@ -15,6 +18,7 @@ function Item(props) {
   const [loaderHidden, setLoaderHidden] = useState(true)
   const [blur, setBlur] = useState()
   const [sellStatus, setSellStatus] = useState("")
+  const [priceLabel, setPriceLabel] = useState();
 
   const id = props.id;
 
@@ -43,14 +47,25 @@ function Item(props) {
     setOwner(owner.toText());
     setImage(image);
 
-    const nftIsListed = await opend.isListed(props.id)
-    if (nftIsListed) {
-      setOwner("Opend");
-      setBlur({filter: "blur(5px)"});
-      setSellStatus("Listed");
+    if(props.role == "collection"){
+      const nftIsListed = await opend.isListed(props.id)
+      if (nftIsListed) {
+        setOwner("Opend");
+        setBlur({filter: "blur(5px)"});
+        setSellStatus("Listed");
+      }
+      else{
+        setButton(<Button handleClick={handleSell} text={"Sell"} />);
+      }
     }
-    else{
-      setButton(<Button handleClick={handleSell} text={"Sell"} />);
+    else if(props.role == "discover"){
+      const originalOwner = await opend.getOriginalOwner(props.id);
+      if (originalOwner.toText() != CURRENT_USER_ID.toText()) {
+        setButton(<Button handleClick={handleBuy} text={"Buy"} />);
+      }
+
+      const price = await opend.getListedNFTPrice(props.id);
+      setPriceLabel(<PriceLabel sellPrice={price.toString()} />);
     }
   }
 
@@ -81,7 +96,7 @@ function Item(props) {
     console.log("listing: " + listingResult);
     if (listingResult == "Success") {
       const openDId = await opend.getOpenDCanisterID();
-      const transferResult = await NFTActor.transferOwnership(openDId, true);
+      const transferResult = await NFTActor.transferOwnership(openDId,true);
       console.log("transfer: " + transferResult);
       if (transferResult == "Success") {
         setLoaderHidden(true);
@@ -90,6 +105,24 @@ function Item(props) {
         setOwner("OpenD");
         setSellStatus("Listed");
       }
+    }
+  }
+
+  async function handleBuy(){
+    console.log("Buy was Triggered")
+    const tokenActor = await Actor.createActor(tokenIdlFactory, {
+      agent,
+      canisterId: Principal.fromText("s24we-diaaa-aaaaa-aaaka-cai")
+    });
+
+    const sellerId = await opend.getOriginalOwner(props.id);
+    const itemPrice = await opend.getListedNFTPrice(props.id);
+
+    const result = await tokenActor.transfer(sellerId, itemPrice);
+    console.log(result)
+    if (result=="Success") {
+      const transferResult = await opend.completePurchase(props.id, sellerId, CURRENT_USER_ID);
+      console.log("purchase: "+ transferResult);
     }
   }
 
@@ -108,6 +141,7 @@ function Item(props) {
           <div></div>
         </div>
         <div className="disCardContent-root">
+          {priceLabel}
           <h2 className="disTypography-root makeStyles-bodyText-24 disTypography-h5 disTypography-gutterBottom">
             {name}
             <span className="purple-text"> {sellStatus}</span>
